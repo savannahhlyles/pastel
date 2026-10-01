@@ -2,6 +2,7 @@ use crate::commands::prelude::*;
 
 use pastel::Color;
 
+/// Produces a gray tone of the requested lightness.
 pub struct GrayCommand;
 
 impl GenericCommand for GrayCommand {

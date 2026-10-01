@@ -1,3 +1,5 @@
+//! The [`ColorSpace`] trait shared by the color-space representations.
+
 use crate::helper::Fraction;
 use crate::Color;
 

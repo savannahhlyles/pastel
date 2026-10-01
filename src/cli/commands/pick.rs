@@ -2,6 +2,7 @@ use crate::commands::prelude::*;
 
 use crate::colorpicker::{print_colorspectrum, run_external_colorpicker};
 
+/// Interactively picks a color using an external color picker tool.
 pub struct PickCommand;
 
 impl GenericCommand for PickCommand {

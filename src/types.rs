@@ -1,3 +1,5 @@
+//! Small shared numeric types used across the color library.
+
 use crate::helper::mod_positive;
 
 pub type Scalar = f64;

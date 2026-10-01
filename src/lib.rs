@@ -1,3 +1,37 @@
+//! Core color library for pastel.
+//!
+//! The central type is [`Color`], an abstract color that can be constructed from
+//! and converted to a wide range of color spaces and models:
+//!
+//! * device RGB (both 8-bit and floating point) and hexadecimal notation,
+//! * the cylindrical HSL and HSV models,
+//! * the CIE spaces XYZ, L\*a\*b\* and LCh,
+//! * the perceptually uniform Oklab and OkLCh spaces,
+//! * the subtractive CMYK model, and
+//! * 8-bit and 24-bit ANSI terminal colors (see [`ansi`]).
+//!
+//! Colors are stored in a representation-independent way, so converting between
+//! spaces is lossless except where a target space has a smaller gamut.
+//!
+//! # Example
+//!
+//! ```
+//! use pastel::Color;
+//!
+//! // Parse a color and read back some of its representations.
+//! let color = Color::from_rgb(255, 0, 0);
+//! assert_eq!(color.to_rgb_hex_string(true), "#ff0000");
+//!
+//! // Mix two colors in a chosen color space.
+//! let a = Color::from_rgb(0, 0, 0);
+//! let b = Color::from_rgb(255, 255, 255);
+//! let _gray = a.mix::<pastel::Lab>(&b, pastel::Fraction::from(0.5));
+//! ```
+//!
+//! Perceptual color differences (used for ranking and matching colors) are
+//! provided by the [`delta_e`] module, and the color-space representation types
+//! themselves live in [`spaces`].
+
 pub mod ansi;
 pub mod colorspace;
 pub mod delta_e;
@@ -6,13 +40,15 @@ mod helper;
 pub mod named;
 pub mod parser;
 pub mod random;
+pub mod spaces;
 mod types;
 
 use std::{fmt, str::FromStr};
 
 use colorspace::ColorSpace;
-pub use helper::Fraction;
 use helper::{clamp, interpolate, interpolate_angle, mod_positive, MaxPrecision};
+pub use helper::Fraction;
+pub use spaces::{LCh, Lab, OkLCh, OkLab, LMS, XYZ};
 use types::{Hue, Scalar};
 
 /// The representation of a color.
@@ -33,11 +69,12 @@ pub struct Color {
 }
 
 // Illuminant D65 constants used for Lab color space conversions.
-const D65_XN: Scalar = 0.950_470;
-const D65_YN: Scalar = 1.0;
-const D65_ZN: Scalar = 1.088_830;
+pub(crate) const D65_XN: Scalar = 0.950_470;
+pub(crate) const D65_YN: Scalar = 1.0;
+pub(crate) const D65_ZN: Scalar = 1.088_830;
 
 impl Color {
+    /// Construct a color from its hsla representation.
     pub fn from_hsla(hue: Scalar, saturation: Scalar, lightness: Scalar, alpha: Scalar) -> Color {
         Self::from(&HSLA {
             h: hue,
@@ -47,6 +84,7 @@ impl Color {
         })
     }
 
+    /// Construct a color from its hsl representation.
     pub fn from_hsl(hue: Scalar, saturation: Scalar, lightness: Scalar) -> Color {
         Self::from(&HSLA {
             h: hue,
@@ -56,6 +94,7 @@ impl Color {
         })
     }
 
+    /// Construct a color from its hsva representation.
     pub fn from_hsva(hue: Scalar, saturation: Scalar, value: Scalar, alpha: Scalar) -> Color {
         Self::from(&HSVA {
             h: hue,
@@ -65,6 +104,7 @@ impl Color {
         })
     }
 
+    /// Construct a color from its hsv representation.
     pub fn from_hsv(hue: Scalar, saturation: Scalar, value: Scalar) -> Color {
         Self::from(&HSVA {
             h: hue,
@@ -690,6 +730,7 @@ impl Color {
     ///
     /// See: <https://www.w3.org/TR/2008/REC-WCAG20-20081211/#relativeluminancedef>
     pub fn luminance(&self) -> Scalar {
+        /// F.
         fn f(s: Scalar) -> Scalar {
             if s <= 0.03928 {
                 s / 12.92
@@ -781,6 +822,7 @@ impl Color {
         //       Co:  output color
         //   Ca, Cb:  A/B color
         //
+        /// Composite channel.
         fn composite_channel(c_a: u8, a_a: f64, c_b: u8, a_b: f64, a_o: f64) -> u8 {
             ((c_a as f64 * a_a + c_b as f64 * a_b * (1.0 - a_a)) / a_o).floor() as u8
         }
@@ -821,6 +863,7 @@ impl FromStr for Color {
     }
 }
 
+/// Build a color from HSLA components.
 impl From<&HSLA> for Color {
     fn from(color: &HSLA) -> Self {
         Color {
@@ -832,6 +875,7 @@ impl From<&HSLA> for Color {
     }
 }
 
+/// Build a color from HSVA components.
 impl From<&HSVA> for Color {
     fn from(color: &HSVA) -> Self {
         let lightness = color.v * (1.0 - color.s / 2.0);
@@ -850,6 +894,7 @@ impl From<&HSVA> for Color {
     }
 }
 
+/// Build a color from 8-bit RGBA components.
 impl From<&RGBA<u8>> for Color {
     fn from(color: &RGBA<u8>) -> Self {
         let max_chroma = u8::max(u8::max(color.r, color.g), color.b);
@@ -888,6 +933,7 @@ impl From<&RGBA<u8>> for Color {
     }
 }
 
+/// Build a color from floating-point RGBA components.
 impl From<&RGBA<f64>> for Color {
     fn from(color: &RGBA<f64>) -> Self {
         let r = Scalar::round(clamp(0.0, 255.0, 255.0 * color.r)) as u8;
@@ -902,6 +948,7 @@ impl From<&RGBA<f64>> for Color {
     }
 }
 
+/// Convert from the CIE 1931 XYZ color space.
 impl From<&XYZ> for Color {
     fn from(color: &XYZ) -> Self {
         #![allow(clippy::many_single_char_names)]
@@ -926,6 +973,7 @@ impl From<&XYZ> for Color {
     }
 }
 
+/// Convert from the LMS (long/medium/short cone response) color space.
 impl From<&LMS> for Color {
     fn from(color: &LMS) -> Self {
         #![allow(clippy::many_single_char_names)]
@@ -941,6 +989,7 @@ impl From<&LMS> for Color {
     }
 }
 
+/// Convert from the CIELAB color space.
 impl From<&Lab> for Color {
     fn from(color: &Lab) -> Self {
         #![allow(clippy::many_single_char_names)]
@@ -968,6 +1017,7 @@ impl From<&Lab> for Color {
     }
 }
 
+/// Convert from the Oklab color space.
 impl From<&OkLab> for Color {
     fn from(color: &OkLab) -> Self {
         let l = (1.0 * color.l + 0.39633779 * color.a + 0.21580376 * color.b).powi(3);
@@ -987,6 +1037,7 @@ impl From<&OkLab> for Color {
     }
 }
 
+/// Convert from the CIELCh color space.
 impl From<&LCh> for Color {
     fn from(color: &LCh) -> Self {
         #![allow(clippy::many_single_char_names)]
@@ -1004,6 +1055,7 @@ impl From<&LCh> for Color {
     }
 }
 
+/// Convert from the OkLCh color space.
 impl From<&OkLCh> for Color {
     fn from(color: &OkLCh) -> Self {
         #![allow(clippy::many_single_char_names)]
@@ -1022,6 +1074,7 @@ impl From<&OkLCh> for Color {
 }
 
 // from CMYK to Color so you can do -> let new_color = Color::from(&some_cmyk);
+/// Convert from the CMYK color model.
 impl From<&CMYK> for Color {
     fn from(color: &CMYK) -> Self {
         #![allow(clippy::many_single_char_names)]
@@ -1040,9 +1093,13 @@ impl From<&CMYK> for Color {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RGBA<T> {
+    /// The red channel.
     pub r: T,
+    /// The green channel.
     pub g: T,
+    /// The blue channel.
     pub b: T,
+    /// The alpha (opacity) channel in `[0, 1]`.
     pub alpha: Scalar,
 }
 
@@ -1065,6 +1122,7 @@ impl ColorSpace for RGBA<f64> {
     }
 }
 
+/// Convert a color into floating-point RGBA components.
 impl From<&Color> for RGBA<f64> {
     fn from(color: &Color) -> Self {
         let h_s = color.hue.value() / 60.0;
@@ -1098,6 +1156,7 @@ impl From<&Color> for RGBA<f64> {
     }
 }
 
+/// Convert a color into 8-bit RGBA components (channels are rounded).
 impl From<&Color> for RGBA<u8> {
     fn from(color: &Color) -> Self {
         let c = RGBA::<f64>::from(color);
@@ -1128,9 +1187,13 @@ impl fmt::Display for RGBA<u8> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HSLA {
+    /// The hue angle in degrees.
     pub h: Scalar,
+    /// The saturation in `[0, 1]`.
     pub s: Scalar,
+    /// The lightness in `[0, 1]`.
     pub l: Scalar,
+    /// The alpha (opacity) channel in `[0, 1]`.
     pub alpha: Scalar,
 }
 
@@ -1157,6 +1220,7 @@ impl ColorSpace for HSLA {
     }
 }
 
+/// Convert a color into HSLA components.
 impl From<&Color> for HSLA {
     fn from(color: &Color) -> Self {
         HSLA {
@@ -1176,9 +1240,13 @@ impl fmt::Display for HSLA {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HSVA {
+    /// The hue angle in degrees.
     pub h: Scalar,
+    /// The saturation in `[0, 1]`.
     pub s: Scalar,
+    /// The value (brightness) in `[0, 1]`.
     pub v: Scalar,
+    /// The alpha (opacity) channel in `[0, 1]`.
     pub alpha: Scalar,
 }
 
@@ -1205,6 +1273,7 @@ impl ColorSpace for HSVA {
     }
 }
 
+/// Convert a color into HSVA components.
 impl From<&Color> for HSVA {
     fn from(color: &Color) -> Self {
         let lightness = color.lightness;
@@ -1232,318 +1301,18 @@ impl fmt::Display for HSVA {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct XYZ {
-    pub x: Scalar,
-    pub y: Scalar,
-    pub z: Scalar,
-    pub alpha: Scalar,
-}
-
-impl From<&Color> for XYZ {
-    fn from(color: &Color) -> Self {
-        #![allow(clippy::many_single_char_names)]
-        let finv = |c_: f64| {
-            if c_ <= 0.04045 {
-                c_ / 12.92
-            } else {
-                Scalar::powf((c_ + 0.055) / 1.055, 2.4)
-            }
-        };
-
-        let rec = RGBA::from(color);
-        let r = finv(rec.r);
-        let g = finv(rec.g);
-        let b = finv(rec.b);
-
-        let x = 0.4124 * r + 0.3576 * g + 0.1805 * b;
-        let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        let z = 0.0193 * r + 0.1192 * g + 0.9505 * b;
-
-        XYZ {
-            x,
-            y,
-            z,
-            alpha: color.alpha,
-        }
-    }
-}
-
-impl fmt::Display for XYZ {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "XYZ({x}, {y}, {z})", x = self.x, y = self.y, z = self.z,)
-    }
-}
-
-/// A color space whose axes correspond to the responsivity spectra of the long-, medium-, and
-/// short-wavelength cone cells in the human eye. More info
-/// [here](https://en.wikipedia.org/wiki/LMS_color_space).
-#[derive(Debug, Clone, PartialEq)]
-pub struct LMS {
-    pub l: Scalar,
-    pub m: Scalar,
-    pub s: Scalar,
-    pub alpha: Scalar,
-}
-
-impl From<&Color> for LMS {
-    fn from(color: &Color) -> Self {
-        let XYZ { x, y, z, alpha } = XYZ::from(color);
-        let l = 0.38971 * x + 0.68898 * y - 0.07868 * z;
-        let m = -0.22981 * x + 1.18340 * y + 0.04641 * z;
-        let s = 0.00000 * x + 0.00000 * y + 1.00000 * z;
-
-        LMS { l, m, s, alpha }
-    }
-}
-
-impl fmt::Display for LMS {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "LMS({l}, {m}, {s})", l = self.l, m = self.m, s = self.s,)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Lab {
-    pub l: Scalar,
-    pub a: Scalar,
-    pub b: Scalar,
-    pub alpha: Scalar,
-}
-
-impl ColorSpace for Lab {
-    fn from_color(c: &Color) -> Self {
-        c.to_lab()
-    }
-
-    fn into_color(self) -> Color {
-        Color::from_lab(self.l, self.a, self.b, self.alpha)
-    }
-
-    fn mix(&self, other: &Self, fraction: Fraction) -> Self {
-        Self {
-            l: interpolate(self.l, other.l, fraction),
-            a: interpolate(self.a, other.a, fraction),
-            b: interpolate(self.b, other.b, fraction),
-            alpha: interpolate(self.alpha, other.alpha, fraction),
-        }
-    }
-}
-
-impl From<&Color> for Lab {
-    fn from(color: &Color) -> Self {
-        let rec = XYZ::from(color);
-
-        let cut = Scalar::powf(6.0 / 29.0, 3.0);
-        let f = |t| {
-            if t > cut {
-                Scalar::powf(t, 1.0 / 3.0)
-            } else {
-                (1.0 / 3.0) * Scalar::powf(29.0 / 6.0, 2.0) * t + 4.0 / 29.0
-            }
-        };
-
-        let fy = f(rec.y / D65_YN);
-
-        let l = 116.0 * fy - 16.0;
-        let a = 500.0 * (f(rec.x / D65_XN) - fy);
-        let b = 200.0 * (fy - f(rec.z / D65_ZN));
-
-        Lab {
-            l,
-            a,
-            b,
-            alpha: color.alpha,
-        }
-    }
-}
-
-impl fmt::Display for Lab {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Lab({l}, {a}, {b})", l = self.l, a = self.a, b = self.b,)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct OkLab {
-    pub l: Scalar,
-    pub a: Scalar,
-    pub b: Scalar,
-    pub alpha: Scalar,
-}
-
-impl ColorSpace for OkLab {
-    fn from_color(c: &Color) -> Self {
-        c.to_oklab()
-    }
-
-    fn into_color(self) -> Color {
-        Color::from_oklab(self.l, self.a, self.b, self.alpha)
-    }
-
-    fn mix(&self, other: &Self, fraction: Fraction) -> Self {
-        Self {
-            l: interpolate(self.l, other.l, fraction),
-            a: interpolate(self.a, other.a, fraction),
-            b: interpolate(self.b, other.b, fraction),
-            alpha: interpolate(self.alpha, other.alpha, fraction),
-        }
-    }
-}
-
-impl From<&Color> for OkLab {
-    fn from(value: &Color) -> Self {
-        let rec = XYZ::from(value);
-
-        // https://bottosson.github.io/posts/oklab/?#converting-from-xyz-to-oklab
-
-        // multiply with M1 and apply non-linearity
-        let long =
-            (0.8189330101 * rec.x + 0.3618667424 * rec.y + -0.1288597137 * rec.z).powf(1. / 3.);
-        let medium =
-            (0.0329845436 * rec.x + 0.9293118715 * rec.y + 0.0361456387 * rec.z).powf(1. / 3.);
-        let short =
-            (0.0482003018 * rec.x + 0.2643662691 * rec.y + 0.6338517070 * rec.z).powf(1. / 3.);
-
-        // multiply with M2
-        let l = 0.2104542553 * long + 0.7936177850 * medium + -0.0040720468 * short;
-        let a = 1.9779984951 * long + -2.4285922050 * medium + 0.4505937099 * short;
-        let b = 0.0259040371 * long + 0.7827717662 * medium + -0.8086757660 * short;
-
-        Self {
-            l,
-            a,
-            b,
-            alpha: rec.alpha,
-        }
-    }
-}
-
-impl fmt::Display for OkLab {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "OkLab({l}, {a}, {b})",
-            l = self.l,
-            a = self.a,
-            b = self.b,
-        )
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LCh {
-    pub l: Scalar,
-    pub c: Scalar,
-    pub h: Scalar,
-    pub alpha: Scalar,
-}
-
-impl ColorSpace for LCh {
-    fn from_color(c: &Color) -> Self {
-        c.to_lch()
-    }
-
-    fn into_color(self) -> Color {
-        Color::from_lch(self.l, self.c, self.h, self.alpha)
-    }
-
-    fn mix(&self, other: &Self, fraction: Fraction) -> Self {
-        // make sure that the hue is preserved when mixing with gray colors
-        let self_hue = if self.c < 0.1 { other.h } else { self.h };
-        let other_hue = if other.c < 0.1 { self.h } else { other.h };
-
-        Self {
-            l: interpolate(self.l, other.l, fraction),
-            c: interpolate(self.c, other.c, fraction),
-            h: interpolate_angle(self_hue, other_hue, fraction),
-            alpha: interpolate(self.alpha, other.alpha, fraction),
-        }
-    }
-}
-
-impl From<&Color> for LCh {
-    fn from(color: &Color) -> Self {
-        let Lab { l, a, b, alpha } = Lab::from(color);
-
-        const RAD2DEG: Scalar = 180.0 / std::f64::consts::PI;
-
-        let c = Scalar::sqrt(a * a + b * b);
-        let h = mod_positive(Scalar::atan2(b, a) * RAD2DEG, 360.0);
-
-        LCh { l, c, h, alpha }
-    }
-}
-
-impl fmt::Display for LCh {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "LCh({l}, {c}, {h})", l = self.l, c = self.c, h = self.h,)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct OkLCh {
-    pub l: Scalar,
-    pub c: Scalar,
-    pub h: Scalar,
-    pub alpha: Scalar,
-}
-
-impl ColorSpace for OkLCh {
-    fn from_color(c: &Color) -> Self {
-        c.to_oklch()
-    }
-
-    fn into_color(self) -> Color {
-        Color::from_oklch(self.l, self.c, self.h, self.alpha)
-    }
-
-    fn mix(&self, other: &Self, fraction: Fraction) -> Self {
-        // make sure that the hue is preserved when mixing with gray colors
-        let self_hue = if self.c < 0.0003 { other.h } else { self.h };
-        let other_hue = if other.c < 0.0003 { self.h } else { other.h };
-
-        Self {
-            l: interpolate(self.l, other.l, fraction),
-            c: interpolate(self.c, other.c, fraction),
-            h: interpolate_angle(self_hue, other_hue, fraction),
-            alpha: interpolate(self.alpha, other.alpha, fraction),
-        }
-    }
-}
-
-impl From<&Color> for OkLCh {
-    fn from(color: &Color) -> Self {
-        let OkLab { l, a, b, alpha } = OkLab::from(color);
-
-        const RAD2DEG: Scalar = 180.0 / std::f64::consts::PI;
-
-        let c = Scalar::sqrt(a * a + b * b);
-        let h = mod_positive(Scalar::atan2(b, a) * RAD2DEG, 360.0);
-
-        OkLCh { l, c, h, alpha }
-    }
-}
-
-impl fmt::Display for OkLCh {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "OkLCh({l}, {c}, {h})",
-            l = self.l,
-            c = self.c,
-            h = self.h,
-        )
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct CMYK {
+    /// The cyan component in `[0, 1]`.
     pub c: Scalar,
+    /// The magenta component in `[0, 1]`.
     pub m: Scalar,
+    /// The yellow component in `[0, 1]`.
     pub y: Scalar,
+    /// The key (black) component in `[0, 1]`.
     pub k: Scalar,
 }
 
+/// Convert a color into the CMYK color model.
 impl From<&Color> for CMYK {
     fn from(color: &Color) -> Self {
         let rgba = RGBA::<u8>::from(color);

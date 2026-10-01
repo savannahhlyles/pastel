@@ -1,3 +1,5 @@
+//! Numeric helper functions shared across the color library.
+
 use std::{
     cmp::Ordering,
     fmt::{self, Display},
@@ -6,6 +8,9 @@ use std::{
 use crate::types::Scalar;
 
 /// Like `%`, but always positive.
+///
+/// For a positive modulus `y` the result lies in `[0, y)`, which is what the
+/// angle- and hue-wrapping code relies on.
 pub fn mod_positive(x: Scalar, y: Scalar) -> Scalar {
     (x % y + y) % y
 }

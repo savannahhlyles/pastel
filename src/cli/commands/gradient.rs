@@ -4,6 +4,8 @@ use crate::commands::prelude::*;
 use pastel::ColorScale;
 use pastel::Fraction;
 
+/// Prints a smooth gradient of `n` colors interpolated between the given
+/// endpoints in a chosen color space.
 pub struct GradientCommand;
 
 impl GenericCommand for GradientCommand {

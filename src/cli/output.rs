@@ -15,6 +15,7 @@ pub struct Output<'a> {
 }
 
 impl Output<'_> {
+    /// New.
     pub fn new(handle: &mut dyn Write) -> Output<'_> {
         Output {
             handle,
@@ -22,6 +23,7 @@ impl Output<'_> {
         }
     }
 
+    /// Show color tty.
     pub fn show_color_tty(&mut self, config: &Config, color: &Color) -> Result<()> {
         let checkerboard_size: usize = 16;
         let color_panel_size: usize = 12;
@@ -102,6 +104,7 @@ impl Output<'_> {
         canvas.print(self.handle)
     }
 
+    /// Show color.
     pub fn show_color(&mut self, config: &Config, color: &Color) -> Result<()> {
         if config.interactive_mode {
             if self.colors_shown < 1 {

@@ -6,6 +6,7 @@ use pastel::ansi::Stream;
 use pastel::distinct::{self, DistanceMetric, IterationStatistics};
 use pastel::{Fraction, HSLA};
 
+/// Finds a set of perceptually distinct colors via simulated annealing.
 pub struct DistinctCommand;
 
 fn print_iteration(out: &mut dyn Write, brush: Brush, stats: &IterationStatistics) -> Result<()> {

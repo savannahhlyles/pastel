@@ -1,12 +1,16 @@
+//! Strategies for generating random colors.
+
 use crate::Color;
 
 use rand::{prelude::*, rng};
 
 pub trait RandomizationStrategy {
+    /// Generate.
     fn generate(&mut self) -> Color {
         self.generate_with(&mut rng())
     }
 
+    /// Generate with.
     fn generate_with(&mut self, r: &mut dyn RngCore) -> Color;
 }
 
@@ -19,6 +23,7 @@ pub mod strategies {
     pub struct Vivid;
 
     impl RandomizationStrategy for Vivid {
+        /// Generate with.
         fn generate_with(&mut self, rng: &mut dyn RngCore) -> Color {
             let hue = rng.random::<f64>() * 360.0;
             let saturation = 0.2 + 0.6 * rng.random::<f64>();
@@ -31,6 +36,7 @@ pub mod strategies {
     pub struct UniformRGB;
 
     impl RandomizationStrategy for UniformRGB {
+        /// Generate with.
         fn generate_with(&mut self, rng: &mut dyn RngCore) -> Color {
             Color::from_rgb(rng.random::<u8>(), rng.random::<u8>(), rng.random::<u8>())
         }
@@ -39,6 +45,7 @@ pub mod strategies {
     pub struct UniformGray;
 
     impl RandomizationStrategy for UniformGray {
+        /// Generate with.
         fn generate_with(&mut self, rng: &mut dyn RngCore) -> Color {
             Color::graytone(rng.random::<f64>())
         }
@@ -47,6 +54,7 @@ pub mod strategies {
     pub struct UniformHueLCh;
 
     impl RandomizationStrategy for UniformHueLCh {
+        /// Generate with.
         fn generate_with(&mut self, rng: &mut dyn RngCore) -> Color {
             Color::from_lch(70.0, 35.0, 360.0 * rng.random::<f64>(), 1.0)
         }

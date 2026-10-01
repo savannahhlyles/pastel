@@ -1,3 +1,10 @@
+//! Parsing of color specifications in the various textual formats pastel
+//! understands (hex, functional `rgb()`/`hsl()`/`hsv()`, `gray()`, the CIE
+//! `lab()`/`lch()` families and bare CSS color names).
+//!
+//! The entry point is [`parse_color`], which tries each supported syntax in
+//! turn and returns the first successful match.
+
 use nom::branch::alt;
 use nom::bytes::complete::*;
 use nom::character::complete::*;
@@ -10,8 +17,18 @@ use nom::IResult;
 use crate::named::NAMED_COLORS;
 use crate::Color;
 
-fn hex_to_u8_unsafe(num: &str) -> u8 {
-    u8::from_str_radix(num, 16).unwrap()
+/// Decode a hex digit group (one or two characters) into a byte. The caller is
+/// responsible for only passing character ranges that `hex_digit1` has already
+/// accepted, so the radix conversion cannot fail.
+fn hex_byte(digits: &str) -> u8 {
+    u8::from_str_radix(digits, 16).unwrap()
+}
+
+/// Expand a single hex nibble into a full byte by repeating it, e.g. `0xF`
+/// becomes `0xFF`. This is the standard widening used for the short `#RGB`
+/// and `#RGBA` forms.
+fn expand_nibble(nibble: u8) -> u8 {
+    nibble * 16 + nibble
 }
 
 fn rgb(r: u8, g: u8, b: u8) -> Color {
@@ -22,54 +39,71 @@ fn rgba(r: u8, g: u8, b: u8, a: f64) -> Color {
     Color::from_rgba(r, g, b, a)
 }
 
+/// Consume a comma surrounded by optional whitespace, e.g. the separators in
+/// `rgb(1, 2, 3)`.
 fn comma_separated(input: &str) -> IResult<&str, &str> {
     let (input, _) = space0(input)?;
     let (input, _) = char(',')(input)?;
     space0(input)
 }
 
+/// Consume the separator between color components: either a comma (with optional
+/// surrounding spaces) or one-or-more spaces, so both `rgb(1,2,3)` and
+/// `rgb(1 2 3)` are accepted.
 fn parse_separator(input: &str) -> IResult<&str, &str> {
     alt((comma_separated, space1))(input)
 }
 
+/// Consume an optional leading `#`, as used by hex color literals.
 fn opt_hash_char(s: &str) -> IResult<&str, Option<char>> {
     opt(char('#'))(s)
 }
 
+/// Parse a percentage such as `50%` and return it as a fraction in `[0, 1]`.
 fn parse_percentage(input: &str) -> IResult<&str, f64> {
     let (input, percent) = double(input)?;
     let (input, _) = char('%')(input)?;
     Ok((input, percent / 100.))
 }
 
+/// Parse an angle given in degrees. The unit suffix (`°` or `deg`) is optional,
+/// so a bare number is read as degrees.
 fn parse_degrees(input: &str) -> IResult<&str, f64> {
     let (input, d) = double(input)?;
     let (input, _) = alt((tag("°"), tag("deg"), tag("")))(input)?;
     Ok((input, d))
 }
 
+/// Parse an angle given in radians (suffix `rad`) and convert it to degrees.
 fn parse_rads(input: &str) -> IResult<&str, f64> {
     let (input, rads) = double(input)?;
     let (input, _) = tag("rad")(input)?;
     Ok((input, rads * 180. / std::f64::consts::PI))
 }
 
+/// Parse an angle given in gradians (suffix `grad`) and convert it to degrees.
 fn parse_grads(input: &str) -> IResult<&str, f64> {
     let (input, grads) = double(input)?;
     let (input, _) = tag("grad")(input)?;
     Ok((input, grads * 360. / 400.))
 }
 
+/// Parse an angle given in turns (suffix `turn`) and convert it to degrees.
 fn parse_turns(input: &str) -> IResult<&str, f64> {
     let (input, turns) = double(input)?;
     let (input, _) = tag("turn")(input)?;
     Ok((input, turns * 360.))
 }
 
+/// Parse an angle in any of the supported units, normalizing to degrees. The
+/// unit-suffixed forms are tried before the bare-degrees fallback.
 fn parse_angle(input: &str) -> IResult<&str, f64> {
     alt((parse_turns, parse_grads, parse_rads, parse_degrees))(input)
 }
 
+/// Parse an optional trailing alpha component, defaulting to fully opaque
+/// (`1.0`) when it is absent. Alpha may be written as a percentage or a bare
+/// number.
 fn parse_alpha<'a>(input: &'a str) -> IResult<&'a str, f64> {
     let (input, alpha) = opt(|input: &'a str| {
         let (input, _) = parse_separator(input)?;
@@ -78,45 +112,41 @@ fn parse_alpha<'a>(input: &'a str) -> IResult<&'a str, f64> {
     Ok((input, alpha.unwrap_or(1.0)))
 }
 
+/// Parse a hex color literal in `#RGB`, `#RGBA`, `#RRGGBB` or `#RRGGBBAA`
+/// form (the leading `#` is optional). Shorthand forms have each nibble
+/// widened to a full byte.
 fn parse_hex(input: &str) -> IResult<&str, Color> {
     let (input, _) = opt_hash_char(input)?;
     let (input, hex_chars) = hex_digit1(input)?;
     match hex_chars.len() {
         // RRGGBB
         6 => {
-            let r = hex_to_u8_unsafe(&hex_chars[0..2]);
-            let g = hex_to_u8_unsafe(&hex_chars[2..4]);
-            let b = hex_to_u8_unsafe(&hex_chars[4..6]);
+            let r = hex_byte(&hex_chars[0..2]);
+            let g = hex_byte(&hex_chars[2..4]);
+            let b = hex_byte(&hex_chars[4..6]);
             Ok((input, rgb(r, g, b)))
         }
         // RGB
         3 => {
-            let r = hex_to_u8_unsafe(&hex_chars[0..1]);
-            let g = hex_to_u8_unsafe(&hex_chars[1..2]);
-            let b = hex_to_u8_unsafe(&hex_chars[2..3]);
-            let r = r * 16 + r;
-            let g = g * 16 + g;
-            let b = b * 16 + b;
+            let r = expand_nibble(hex_byte(&hex_chars[0..1]));
+            let g = expand_nibble(hex_byte(&hex_chars[1..2]));
+            let b = expand_nibble(hex_byte(&hex_chars[2..3]));
             Ok((input, rgb(r, g, b)))
         }
         // RRGGBBAA
         8 => {
-            let r = hex_to_u8_unsafe(&hex_chars[0..2]);
-            let g = hex_to_u8_unsafe(&hex_chars[2..4]);
-            let b = hex_to_u8_unsafe(&hex_chars[4..6]);
-            let a = hex_to_u8_unsafe(&hex_chars[6..8]) as f64 / 255.0;
+            let r = hex_byte(&hex_chars[0..2]);
+            let g = hex_byte(&hex_chars[2..4]);
+            let b = hex_byte(&hex_chars[4..6]);
+            let a = hex_byte(&hex_chars[6..8]) as f64 / 255.0;
             Ok((input, rgba(r, g, b, a)))
         }
         // RGBA
         4 => {
-            let r = hex_to_u8_unsafe(&hex_chars[0..1]);
-            let g = hex_to_u8_unsafe(&hex_chars[1..2]);
-            let b = hex_to_u8_unsafe(&hex_chars[2..3]);
-            let a = hex_to_u8_unsafe(&hex_chars[3..4]);
-            let r = r * 16 + r;
-            let g = g * 16 + g;
-            let b = b * 16 + b;
-            let a = (a * 16 + a) as f64 / 255.0;
+            let r = expand_nibble(hex_byte(&hex_chars[0..1]));
+            let g = expand_nibble(hex_byte(&hex_chars[1..2]));
+            let b = expand_nibble(hex_byte(&hex_chars[2..3]));
+            let a = expand_nibble(hex_byte(&hex_chars[3..4])) as f64 / 255.0;
             Ok((input, rgba(r, g, b, a)))
         }
         _ => Err(Err::Error(nom::error::Error::new(
@@ -126,10 +156,19 @@ fn parse_hex(input: &str) -> IResult<&str, Color> {
     }
 }
 
-fn parse_numeric_rgb(input: &str) -> IResult<&str, Color> {
+/// Parse an `rgb()`/`rgba()` color whose channels are given as numbers in the
+/// `0..=255` range. The functional `rgb(...)` wrapper is optional.
+/// Consume an optional `rgb(`/`rgba(` prefix together with any following
+/// whitespace, reporting whether the functional form was used (which decides
+/// whether a closing `)` is required).
+fn opt_rgb_prefix(input: &str) -> IResult<&str, bool> {
     let (input, prefixed) = opt(alt((tag("rgb("), tag("rgba("))))(input)?;
-    let is_prefixed = prefixed.is_some();
     let (input, _) = space0(input)?;
+    Ok((input, prefixed.is_some()))
+}
+
+fn parse_numeric_rgb(input: &str) -> IResult<&str, Color> {
+    let (input, is_prefixed) = opt_rgb_prefix(input)?;
     let (input, r) = double(input)?;
     let (input, _) = parse_separator(input)?;
     let (input, g) = double(input)?;
@@ -147,10 +186,9 @@ fn parse_numeric_rgb(input: &str) -> IResult<&str, Color> {
     Ok((input, c))
 }
 
+/// Parse an `rgb()`/`rgba()` color whose channels are given as percentages.
 fn parse_percentage_rgb(input: &str) -> IResult<&str, Color> {
-    let (input, prefixed) = opt(alt((tag("rgb("), tag("rgba("))))(input)?;
-    let is_prefixed = prefixed.is_some();
-    let (input, _) = space0(input)?;
+    let (input, is_prefixed) = opt_rgb_prefix(input)?;
     let (input, r) = parse_percentage(input)?;
     let (input, _) = parse_separator(input)?;
     let (input, g) = parse_percentage(input)?;
@@ -165,6 +203,7 @@ fn parse_percentage_rgb(input: &str) -> IResult<&str, Color> {
     Ok((input, c))
 }
 
+/// Parse an `hsl()`/`hsla()` color (hue angle, saturation and lightness).
 fn parse_hsl(input: &str) -> IResult<&str, Color> {
     let (input, _) = alt((tag("hsl("), tag("hsla(")))(input)?;
     let (input, _) = space0(input)?;
@@ -182,6 +221,7 @@ fn parse_hsl(input: &str) -> IResult<&str, Color> {
     Ok((input, c))
 }
 
+/// Parse an `hsv()`/`hsva()` color (hue angle, saturation and value).
 fn parse_hsv(input: &str) -> IResult<&str, Color> {
     let (input, _) = alt((tag("hsv("), tag("hsva(")))(input)?;
     let (input, _) = space0(input)?;
@@ -199,6 +239,8 @@ fn parse_hsv(input: &str) -> IResult<&str, Color> {
     Ok((input, c))
 }
 
+/// Parse a `gray(...)` shade, where the single component is a non-negative
+/// lightness given as a number or a percentage.
 fn parse_gray(input: &str) -> IResult<&str, Color> {
     let (input, _) = tag("gray(")(input)?;
     let (input, _) = space0(input)?;
@@ -211,6 +253,7 @@ fn parse_gray(input: &str) -> IResult<&str, Color> {
     Ok((input, c))
 }
 
+/// Parse a CIELAB `lab(...)` color.
 fn parse_lab(input: &str) -> IResult<&str, Color> {
     let (input, _) = opt(tag_no_case("cie"))(input)?;
     let (input, _) = tag_no_case("lab(")(input)?;
@@ -229,6 +272,7 @@ fn parse_lab(input: &str) -> IResult<&str, Color> {
     Ok((input, c))
 }
 
+/// Parse an Oklab `oklab(...)` color.
 fn parse_oklab(input: &str) -> IResult<&str, Color> {
     let (input, _) = tag_no_case("oklab(")(input)?;
     let (input, _) = space0(input)?;
@@ -246,6 +290,7 @@ fn parse_oklab(input: &str) -> IResult<&str, Color> {
     Ok((input, c))
 }
 
+/// Parse a CIELCh `lch(...)` color.
 fn parse_lch(input: &str) -> IResult<&str, Color> {
     let (input, _) = opt(tag_no_case("cie"))(input)?;
     let (input, _) = tag_no_case("lch(")(input)?;
@@ -264,6 +309,7 @@ fn parse_lch(input: &str) -> IResult<&str, Color> {
     Ok((input, c))
 }
 
+/// Parse an OkLCh `oklch(...)` color.
 fn parse_oklch(input: &str) -> IResult<&str, Color> {
     let (input, _) = tag_no_case("oklch(")(input)?;
     let (input, _) = space0(input)?;
@@ -281,6 +327,7 @@ fn parse_oklch(input: &str) -> IResult<&str, Color> {
     Ok((input, c))
 }
 
+/// Resolve a bare CSS color name (case-insensitive) to its color.
 fn parse_named(input: &str) -> IResult<&str, Color> {
     let (input, color) = all_consuming(alpha1)(input)?;
     let nc = NAMED_COLORS
@@ -296,6 +343,8 @@ fn parse_named(input: &str) -> IResult<&str, Color> {
     }
 }
 
+/// Parse a color from any of the supported textual representations, returning
+/// `None` if none of them match. Surrounding whitespace is ignored.
 pub fn parse_color(input: &str) -> Option<Color> {
     alt((
         all_consuming(parse_hex),

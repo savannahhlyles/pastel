@@ -1,3 +1,5 @@
+//! Generation of perceptually distinct color sets via simulated annealing.
+
 use rand::{prelude::*, rng};
 
 use crate::delta_e;
@@ -71,12 +73,14 @@ pub struct SimulatedAnnealing<R: Rng> {
 }
 
 impl SimulatedAnnealing<ThreadRng> {
+    /// New.
     pub fn new(initial_colors: &[Color], parameters: SimulationParameters) -> Self {
         Self::with_rng(initial_colors, parameters, rng())
     }
 }
 
 impl<R: Rng> SimulatedAnnealing<R> {
+    /// Builder helper that sets the rng.
     pub fn with_rng(initial_colors: &[Color], parameters: SimulationParameters, rng: R) -> Self {
         let lab_values = initial_colors.iter().map(|c| c.to_lab()).collect();
 
@@ -91,10 +95,12 @@ impl<R: Rng> SimulatedAnnealing<R> {
 }
 
 impl<R: Rng> SimulatedAnnealing<R> {
+    /// Get colors.
     pub fn get_colors(&self) -> Vec<Color> {
         self.colors.clone()
     }
 
+    /// Modify channel.
     fn modify_channel(&mut self, c: &mut u8) {
         if self.rng.random::<bool>() {
             *c = c.saturating_add(self.rng.random::<u8>() % 10);
@@ -103,6 +109,7 @@ impl<R: Rng> SimulatedAnnealing<R> {
         }
     }
 
+    /// Modify color and lab.
     fn modify_color_and_lab(&mut self, color: &mut Color, lab: &mut Lab) {
         let mut strategy = random::strategies::UniformRGB {};
 
@@ -121,6 +128,7 @@ impl<R: Rng> SimulatedAnnealing<R> {
         *lab = color.to_lab();
     }
 
+    /// Run.
     pub fn run(&mut self, callback: &mut dyn FnMut(&IterationStatistics)) -> DistanceResult {
         self.temperature = self.parameters.initial_temperature;
 
@@ -243,6 +251,7 @@ pub fn rearrange_sequence(colors: &mut [Color], metric: DistanceMetric) {
     }
 }
 
+/// Distinct colors.
 pub fn distinct_colors(
     count: usize,
     distance_metric: DistanceMetric,
@@ -286,6 +295,7 @@ pub fn distinct_colors(
 }
 
 impl DistanceResult {
+    /// New.
     fn new(lab_values: &[Lab], distance_metric: DistanceMetric, num_fixed_colors: usize) -> Self {
         let mut result = DistanceResult {
             closest_distances: vec![(Scalar::MAX, usize::MAX); lab_values.len()],
@@ -304,6 +314,7 @@ impl DistanceResult {
         result
     }
 
+    /// Update.
     fn update(&self, lab_values: &[Lab], changed_color: usize) -> Self {
         let mut result = self.clone();
         result.update_distances(lab_values, changed_color, true);
@@ -311,6 +322,7 @@ impl DistanceResult {
         result
     }
 
+    /// Update distances.
     fn update_distances(&mut self, lab_values: &[Lab], color: usize, changed: bool) {
         self.closest_distances[color] = (Scalar::MAX, usize::MAX);
 
@@ -345,6 +357,7 @@ impl DistanceResult {
         }
     }
 
+    /// Update totals.
     fn update_totals(&mut self) {
         self.mean_closest_distance = 0.0;
         self.min_closest_distance = Scalar::MAX;
@@ -375,6 +388,7 @@ impl DistanceResult {
             (self.closest_distances.len() - self.num_fixed_colors) as Scalar;
     }
 
+    /// Distance.
     fn distance(&self, a: &Lab, b: &Lab) -> Scalar {
         match self.distance_metric {
             DistanceMetric::CIE76 => delta_e::cie76(a, b),

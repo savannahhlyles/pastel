@@ -7,6 +7,9 @@ use pastel::Format;
 pub struct FormatCommand;
 
 impl ColorCommand for FormatCommand {
+    /// Render a single color in the representation named by the `type` argument.
+    /// Most variants are plain conversions; `name` resolves the closest CSS color
+    /// name via [`similar_colors`].
     fn run(
         &self,
         out: &mut Output,

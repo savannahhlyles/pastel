@@ -7,6 +7,7 @@ use super::io::ColorArgIterator;
 use pastel::ansi::Style;
 use pastel::parser::parse_color;
 
+/// Paints text with the given foreground (and optional background) color.
 pub struct PaintCommand;
 
 impl GenericCommand for PaintCommand {

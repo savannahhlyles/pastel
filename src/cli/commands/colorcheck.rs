@@ -3,6 +3,7 @@ use crate::hdcanvas::Canvas;
 
 use pastel::ansi::{Brush, Mode};
 
+/// Checks how faithfully the terminal renders colors.
 pub struct ColorCheckCommand;
 
 fn print_board(out: &mut Output, config: &Config, mode: Mode) -> Result<()> {

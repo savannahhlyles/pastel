@@ -1,5 +1,6 @@
 use crate::commands::prelude::*;
 
+/// Displays one or more colors.
 pub struct ShowCommand;
 
 impl ColorCommand for ShowCommand {

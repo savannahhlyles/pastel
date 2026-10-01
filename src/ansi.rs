@@ -1,3 +1,6 @@
+//! Rendering colors as ANSI terminal escape sequences, and the 8-bit ANSI
+//! color cube.
+
 use std::borrow::Borrow;
 
 pub use atty::Stream;
@@ -22,6 +25,7 @@ pub enum Mode {
 pub struct UnknownColorModeError(pub String);
 
 impl Mode {
+    /// Construct a color from its mode str representation.
     pub fn from_mode_str(mode_str: &str) -> Result<Option<Self>, UnknownColorModeError> {
         match mode_str {
             "24bit" | "truecolor" => Ok(Some(Mode::TrueColor)),
@@ -32,6 +36,8 @@ impl Mode {
     }
 }
 
+/// Map one axis of the 6x6x6 ANSI color cube (a value in `0..6`) back onto the
+/// corresponding 8-bit sRGB channel intensity.
 fn cube_to_8bit(code: u8) -> u8 {
     assert!(code < 6);
     match code {
@@ -40,10 +46,25 @@ fn cube_to_8bit(code: u8) -> u8 {
     }
 }
 
+/// Decode the red, green and blue axes (each in `0..6`) of a color in the
+/// 6x6x6 cube from its raw 8-bit code in `16..=231`, inverting the encoding
+/// `code = 16 + 36 * r + 6 * g + b`.
+fn decode_cube_axes(code: u8) -> (u8, u8, u8) {
+    let code_rgb = code - 16;
+    let blue = code_rgb % 6;
+    let code_rg = (code_rgb - blue) / 6;
+    let green = code_rg % 6;
+    let red = (code_rg - green) / 6;
+    (red, green, blue)
+}
+
 pub trait AnsiColor {
+    /// Construct a color from its ansi 8bit representation.
     fn from_ansi_8bit(code: u8) -> Self;
+    /// Convert this color to its ansi 8bit representation.
     fn to_ansi_8bit(&self) -> u8;
 
+    /// Convert this color to its ansi sequence representation.
     fn to_ansi_sequence(&self, mode: Mode) -> String;
 }
 
@@ -70,18 +91,8 @@ impl AnsiColor for Color {
             14 => Color::aqua(),
             15 => Color::white(),
             16..=231 => {
-                // 6 x 6 x 6 cube of 216 colors. We need to decode from
-                //
-                //    code = 16 + 36 × r + 6 × g + b
-
-                let code_rgb = code - 16;
-                let blue = code_rgb % 6;
-
-                let code_rg = (code_rgb - blue) / 6;
-                let green = code_rg % 6;
-
-                let red = (code_rg - green) / 6;
-
+                // 6 x 6 x 6 cube of 216 colors.
+                let (red, green, blue) = decode_cube_axes(code);
                 Color::from_rgb(cube_to_8bit(red), cube_to_8bit(green), cube_to_8bit(blue))
             }
             232..=255 => {
@@ -130,31 +141,37 @@ pub struct Style {
 }
 
 impl Style {
+    /// Foreground.
     pub fn foreground(&mut self, color: &Color) -> &mut Self {
         self.foreground = Some(color.clone());
         self
     }
 
+    /// On.
     pub fn on<C: Borrow<Color>>(&mut self, color: C) -> &mut Self {
         self.background = Some(color.borrow().clone());
         self
     }
 
+    /// Bold.
     pub fn bold(&mut self, on: bool) -> &mut Self {
         self.bold = on;
         self
     }
 
+    /// Italic.
     pub fn italic(&mut self, on: bool) -> &mut Self {
         self.italic = on;
         self
     }
 
+    /// Underline.
     pub fn underline(&mut self, on: bool) -> &mut Self {
         self.underline = on;
         self
     }
 
+    /// Escape sequence.
     pub fn escape_sequence(&self, mode: Mode) -> String {
         let mut codes: Vec<u8> = vec![];
 
@@ -235,10 +252,12 @@ impl From<&mut Style> for Style {
 }
 
 pub trait ToAnsiStyle {
+    /// Ansi style.
     fn ansi_style(&self) -> Style;
 }
 
 impl ToAnsiStyle for Color {
+    /// Ansi style.
     fn ansi_style(&self) -> Style {
         self.clone().into()
     }
@@ -276,10 +295,12 @@ pub struct Brush {
 }
 
 impl Brush {
+    /// Construct a color from its mode representation.
     pub fn from_mode(mode: Option<Mode>) -> Self {
         Brush { mode }
     }
 
+    /// Construct a color from its environment representation.
     pub fn from_environment(stream: Stream) -> Result<Self, UnknownColorModeError> {
         let mode = if atty::is(stream) {
             let env_color_mode = std::env::var("PASTEL_COLOR_MODE").ok();
@@ -293,6 +314,7 @@ impl Brush {
         Ok(Brush { mode })
     }
 
+    /// Paint.
     pub fn paint<S>(self, text: S, style: impl Into<Style>) -> String
     where
         S: AsRef<str>,

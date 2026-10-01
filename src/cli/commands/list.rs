@@ -4,6 +4,7 @@ use crate::commands::sort::key_function;
 use pastel::ansi::ToAnsiStyle;
 use pastel::named::{NamedColor, NAMED_COLORS};
 
+/// Lists all built-in named colors, optionally sorted.
 pub struct ListCommand;
 
 impl GenericCommand for ListCommand {

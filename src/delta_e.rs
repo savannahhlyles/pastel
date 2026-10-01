@@ -27,10 +27,13 @@ use std::f64;
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+/// The CIE76 color difference: plain Euclidean distance in Lab space.
 pub fn cie76(c1: &Lab, c2: &Lab) -> f64 {
     ((c1.l - c2.l).powi(2) + (c1.a - c2.a).powi(2) + (c1.b - c2.b).powi(2)).sqrt()
 }
 
+/// The CIEDE2000 color difference between two Lab colors — the perceptually
+/// weighted metric used throughout pastel for ranking and matching colors.
 pub fn ciede2000(color1: &Lab, color2: &Lab) -> f64 {
     let ksub_l = 1.0;
     let ksub_c = 1.0;
@@ -86,6 +89,7 @@ pub fn ciede2000(color1: &Lab, color2: &Lab) -> f64 {
     (lightness.powi(2) + chroma.powi(2) + hue.powi(2) + r_sub_t * chroma * hue).sqrt()
 }
 
+/// Get h prime fn.
 fn get_h_prime_fn(x: f64, y: f64) -> f64 {
     if x == 0.0 && y == 0.0 {
         return 0.0;
@@ -100,6 +104,7 @@ fn get_h_prime_fn(x: f64, y: f64) -> f64 {
     hue_angle
 }
 
+/// Get delta h prime.
 fn get_delta_h_prime(c1: f64, c2: f64, h_prime_1: f64, h_prime_2: f64) -> f64 {
     if 0.0 == c1 || 0.0 == c2 {
         return 0.0;
@@ -116,6 +121,7 @@ fn get_delta_h_prime(c1: f64, c2: f64, h_prime_1: f64, h_prime_2: f64) -> f64 {
     }
 }
 
+/// Get upcase h bar prime.
 fn get_upcase_h_bar_prime(h_prime_1: f64, h_prime_2: f64) -> f64 {
     if (h_prime_1 - h_prime_2).abs() > 180.0 {
         return (h_prime_1 + h_prime_2 + 360.0) / 2.0;
@@ -124,6 +130,7 @@ fn get_upcase_h_bar_prime(h_prime_1: f64, h_prime_2: f64) -> f64 {
     (h_prime_1 + h_prime_2) / 2.0
 }
 
+/// Get upcase t.
 fn get_upcase_t(upcase_h_bar_prime: f64) -> f64 {
     1.0 - 0.17 * (degrees_to_radians(upcase_h_bar_prime - 30.0)).cos()
         + 0.24 * (degrees_to_radians(2.0 * upcase_h_bar_prime)).cos()
@@ -131,16 +138,19 @@ fn get_upcase_t(upcase_h_bar_prime: f64) -> f64 {
         - 0.20 * (degrees_to_radians(4.0 * upcase_h_bar_prime - 63.0)).cos()
 }
 
+/// Get r sub t.
 fn get_r_sub_t(c_bar_prime: f64, upcase_h_bar_prime: f64) -> f64 {
     -2.0 * (c_bar_prime.powi(7) / (c_bar_prime.powi(7) + 25f64.powi(7))).sqrt()
         * (degrees_to_radians(60.0 * (-(((upcase_h_bar_prime - 275.0) / 25.0).powi(2))).exp()))
             .sin()
 }
 
+/// Radians to degrees.
 fn radians_to_degrees(radians: f64) -> f64 {
     radians * (180.0 / f64::consts::PI)
 }
 
+/// Degrees to radians.
 fn degrees_to_radians(degrees: f64) -> f64 {
     degrees * (f64::consts::PI / 180.0)
 }

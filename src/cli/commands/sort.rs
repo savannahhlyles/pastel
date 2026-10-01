@@ -1,5 +1,6 @@
 use crate::commands::prelude::*;
 
+/// Sorts a sequence of colors by a chosen key (brightness, luminance, ...).
 pub struct SortCommand;
 
 pub fn key_function(sort_order: &str, color: &Color) -> i32 {

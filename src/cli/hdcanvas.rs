@@ -14,6 +14,7 @@ pub struct Canvas {
 }
 
 impl Canvas {
+    /// New.
     pub fn new(height: usize, width: usize, brush: Brush) -> Self {
         assert!(height % 2 == 0);
 
@@ -31,6 +32,7 @@ impl Canvas {
         }
     }
 
+    /// Draw rect.
     pub fn draw_rect(
         &mut self,
         row: usize,
@@ -50,6 +52,7 @@ impl Canvas {
         }
     }
 
+    /// Draw checkerboard.
     pub fn draw_checkerboard(
         &mut self,
         row: usize,
@@ -67,6 +70,7 @@ impl Canvas {
         }
     }
 
+    /// Draw text.
     pub fn draw_text(&mut self, row: usize, col: usize, text: &str) {
         assert!(row % 2 == 0);
 
@@ -82,6 +86,7 @@ impl Canvas {
     // Using block characters for graphics display can trigger this, causing
     // black or white lines or blocks, if the color is the same or too close.
     // The checkerboard should be ok unless the threshold is set fairly high.
+    /// Print.
     pub fn print(&self, out: &mut dyn Write) -> Result<()> {
         for i_div_2 in 0..self.height / 2 {
             for j in 0..self.width {
@@ -119,24 +124,28 @@ impl Canvas {
         Ok(())
     }
 
+    /// Pixel.
     fn pixel(&self, i: usize, j: usize) -> &Option<Color> {
         assert!(i < self.height);
         assert!(j < self.width);
         &self.pixels[i * self.width + j]
     }
 
+    /// Pixel mut.
     fn pixel_mut(&mut self, i: usize, j: usize) -> &mut Option<Color> {
         assert!(i < self.height);
         assert!(j < self.width);
         &mut self.pixels[i * self.width + j]
     }
 
+    /// Char.
     fn char(&self, i: usize, j: usize) -> &Option<char> {
         assert!(i < self.height / 2);
         assert!(j < self.width);
         &self.chars[i * self.width + j]
     }
 
+    /// Char mut.
     fn char_mut(&mut self, i: usize, j: usize) -> &mut Option<char> {
         assert!(i < self.height / 2);
         assert!(j < self.width);

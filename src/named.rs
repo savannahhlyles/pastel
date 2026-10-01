@@ -1,3 +1,5 @@
+//! The table of CSS/SVG named colors.
+
 use once_cell::sync::Lazy;
 
 use crate::Color;
@@ -8,6 +10,7 @@ pub struct NamedColor {
     pub color: Color,
 }
 
+/// Convenience constructor for an entry in the CSS named-color table.
 fn named_color(name: &'static str, r: u8, g: u8, b: u8) -> NamedColor {
     NamedColor {
         name,

@@ -3,6 +3,7 @@ use crate::commands::prelude::*;
 use pastel::random::strategies;
 use pastel::random::RandomizationStrategy;
 
+/// Generates a number of random colors using one of several strategies.
 pub struct RandomCommand;
 
 impl GenericCommand for RandomCommand {
